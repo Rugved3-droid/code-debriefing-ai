@@ -2,7 +2,6 @@
 
 **AI-powered timeline extraction from medical simulation videos using Google Gemini**
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_USERNAME/code-debriefing-ai/blob/main/Code_Debriefing_Tool.ipynb)
 
 ---
 
@@ -161,7 +160,6 @@ Medical Teacher. 2025. [Submitted]
 ## 👥 Authors
 
 - **Rugved Parmar, MD** - SUNY Downstate Health Sciences University
-- **Megan Lee, MD** - SUNY Downstate Health Sciences University
 
 **Contact:** parmarrugved@gmail.com
 
