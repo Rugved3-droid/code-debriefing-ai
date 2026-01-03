@@ -1,0 +1,285 @@
+# =============================================================================
+# AUTOMATED CODE DEBRIEFING TIMELINE GENERATOR
+# Using Google Gemini Multimodal API
+# =============================================================================
+# Authors: Rugved Parmar, MD; Megan Lee, MD
+# Institution: SUNY Downstate Health Sciences University
+# =============================================================================
+# 
+# This tool analyzes medical code/emergency simulation videos and generates
+# structured debriefing timelines automatically using AI.
+#
+# HOW TO USE:
+# 1. Get your free Gemini API key at: https://aistudio.google.com/apikey
+# 2. In Colab: Click the 🔑 Key icon in left sidebar
+# 3. Add secret named "GEMINI_API_KEY" with your key
+# 4. Run this notebook and upload your video!
+# =============================================================================
+
+# CELL 1: Install dependency (run once)
+!pip install -q google-genai
+
+# CELL 2: Import libraries and setup
+from google import genai
+from google.genai import types
+from google.colab import files, userdata
+import time
+import os
+
+# Get API key securely from Colab secrets
+try:
+    API_KEY = userdata.get('GEMINI_API_KEY')
+    print("✅ API key loaded from Colab secrets")
+except Exception as e:
+    print("❌ ERROR: Could not find GEMINI_API_KEY in Colab secrets!")
+    print("\nTo fix this:")
+    print("1. Click the 🔑 Key icon in the left sidebar")
+    print("2. Click '+ Add new secret'")
+    print("3. Name: GEMINI_API_KEY")
+    print("4. Value: Paste your key from https://aistudio.google.com/apikey")
+    print("5. Toggle 'Notebook access' to ON")
+    print("6. Re-run this cell")
+    raise SystemExit("API key not configured")
+
+# CELL 3: Upload your video
+print("📤 Click 'Choose Files' below to upload your simulation video:")
+print("   (Supported: MP4, MOV, AVI, MKV, WEBM)\n")
+uploaded = files.upload()
+
+VIDEO_PATH = list(uploaded.keys())[0]
+file_size_mb = os.path.getsize(VIDEO_PATH) / (1024 * 1024)
+print(f"\n✅ Video uploaded: {VIDEO_PATH} ({file_size_mb:.1f} MB)")
+
+# CELL 4: Run the analysis
+# =============================================================================
+# THE 14-QUESTION STRUCTURED DEBRIEFING PROMPT FRAMEWORK
+# =============================================================================
+PROMPT = """
+You are an expert medical educator and code observer. Analyze this medical emergency/code video and provide a comprehensive debriefing timeline. Answer ALL questions thoroughly.
+
+=============================================================================
+QUESTION 1: SCENARIO IDENTIFICATION
+=============================================================================
+What type of medical emergency? Be specific:
+- Emergency type (ACLS cardiac arrest, postpartum hemorrhage, trauma, etc.)
+- Underlying etiology if identifiable (STEMI, uterine atony, tension pneumothorax, etc.)
+- Patient demographics if mentioned
+
+=============================================================================
+QUESTION 2: COMPLETE TIMELINE
+=============================================================================
+Generate a COMPLETE timestamped timeline of ALL events: [MM:SS] Event - [Category]
+
+Categories: Assessment, Intervention, Medication, Equipment, Communication, Outcome
+
+Document EVERYTHING chronologically from 00:00.
+
+=============================================================================
+QUESTION 3: EVENT COUNTS
+=============================================================================
+Provide exact counts:
+- Assessment events: [count]
+- Intervention events: [count]
+- Medication events: [count]
+- Equipment events: [count]
+- Communication events: [count]
+- Outcome events: [count]
+- TOTAL: [count]
+
+=============================================================================
+QUESTION 4: VISUAL EVENTS
+=============================================================================
+For each, state Yes/No with timestamp:
+- CPR compressions performed?
+- Defibrillator pads placed?
+- Shock delivered?
+- Intubation/airway attempt?
+- Medications physically administered?
+- Monitor displays visible? (What did they show?)
+- Patient physical changes?
+- Team movements and positioning?
+- Procedures (needle decompression, Foley, manual exploration, etc.)?
+
+=============================================================================
+QUESTION 5: AUDIO EVENTS
+=============================================================================
+With exact phrases and timestamps:
+- "Start CPR" or similar commands?
+- Medication names and doses called out?
+- "Charge" or defibrillator commands?
+- Rhythm check announcements?
+- Pulse check results?
+- Team role assignments?
+- Time callouts (e.g., "2 minutes")?
+- ROSC or stabilization announced?
+- SBAR or structured handoffs?
+- Closed-loop communication examples?
+
+=============================================================================
+QUESTION 6: CRITICAL INTERVENTIONS SEQUENCE
+=============================================================================
+List in chronological order with timestamps:
+1. First intervention: [what] at [MM:SS]
+2. Second intervention: [what] at [MM:SS]
+(continue for all)
+
+Calculate time intervals between major interventions.
+
+=============================================================================
+QUESTION 7: ALL MEDICATIONS
+=============================================================================
+For EACH medication:
+- Medication name
+- Timestamp
+- Dose (if mentioned)
+- Route (IV/IM/PO/SL/PR/etc.)
+- How detected (verbal/visual/both)
+
+Total medication count: [X]
+
+=============================================================================
+QUESTION 8: TEAM COMMUNICATION ANALYSIS
+=============================================================================
+- Who was team leader? How identified?
+- Specific commands given (with timestamps)
+- Closed-loop communication examples
+- Communication challenges observed
+- Error prevention/clarification instances
+
+=============================================================================
+QUESTION 9: PROTOCOL ADHERENCE
+=============================================================================
+- Protocol followed (ACLS/ALSO/ATLS/other)?
+- Interventions timed appropriately?
+  - ACLS: Epi every 3-5 min? Rhythm checks every 2 min?
+  - PPH: Staged uterotonic administration?
+- Any protocol deviations noted?
+
+=============================================================================
+QUESTION 10: LIMITATIONS (What You Couldn't See/Hear)
+=============================================================================
+Be honest:
+- Off-screen events
+- Muffled/overlapping audio
+- Unclear actions
+- Ambiguous moments
+- Camera angle limitations
+
+=============================================================================
+QUESTION 11: KEY TEACHING TIMESTAMPS
+=============================================================================
+5-7 MOST IMPORTANT moments for team review:
+[MM:SS] - [Event] - Teaching point: [specific lesson]
+
+=============================================================================
+QUESTION 12: SCENARIO OUTCOME
+=============================================================================
+- ROSC/stabilization achieved? When?
+- Final patient state?
+- Total code/emergency duration?
+- Disposition mentioned (cath lab, OR, ICU)?
+
+=============================================================================
+QUESTION 13: QUALITY METRICS
+=============================================================================
+Calculate:
+- Time to first CPR: [seconds]
+- Time to first rhythm check: [seconds]
+- Time to first shock (if applicable): [seconds]
+- Time to first medication: [seconds]
+- CPR cycles observed: [count]
+- Rhythm checks: [count]
+- Shocks delivered: [count]
+- Time to ROSC/stabilization: [MM:SS]
+- EBL for hemorrhage: [mL]
+
+=============================================================================
+QUESTION 14: DEBRIEFING NARRATIVE SUMMARY
+=============================================================================
+Write 3-5 sentences for starting a debrief:
+"This was a [scenario] involving [patient description]. The team [key actions]. [Outcome]. Notable teaching points include [2-3 specific items]."
+
+=============================================================================
+ADVANCED FINDINGS (if observed)
+=============================================================================
+- Capnography/EtCO2 values and trends
+- Specific rhythm interpretations
+- Secondary diagnoses identified
+- Post-event findings (12-lead, labs)
+- Equipment issues
+- Crowd control/resource management
+- Family support provided
+- Hot debrief conducted?
+"""
+
+# Initialize Gemini client
+client = genai.Client(api_key=API_KEY)
+
+# Upload video to Gemini
+print("\n📤 Uploading video to Gemini servers...")
+video_file = client.files.upload(file=VIDEO_PATH)
+print(f"✅ Upload complete!")
+
+# Wait for processing
+print("\n⏳ Processing video (this may take 1-3 minutes)...")
+while video_file.state.name == "PROCESSING":
+    time.sleep(5)
+    video_file = client.files.get(name=video_file.name)
+    print("   Still processing...")
+print("✅ Video ready for analysis!")
+
+# Run analysis
+print("\n🔍 Analyzing video with AI (typically 2-5 minutes)...")
+print("   Extracting events, medications, communications, and metrics...\n")
+
+start_time = time.time()
+response = client.models.generate_content(
+    model="gemini-2.0-flash",
+    contents=[
+        types.Content(
+            role="user",
+            parts=[
+                types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
+                types.Part.from_text(text=PROMPT)
+            ]
+        )
+    ],
+    config=types.GenerateContentConfig(
+        temperature=0.3,
+        max_output_tokens=8192
+    )
+)
+elapsed = time.time() - start_time
+
+# Display results
+print("=" * 70)
+print("📋 AUTOMATED DEBRIEFING TIMELINE")
+print(f"   Analysis completed in {elapsed:.1f} seconds")
+print("=" * 70 + "\n")
+print(response.text)
+
+# Save and download output
+output_filename = f"debriefing_{VIDEO_PATH.rsplit('.', 1)[0]}.txt"
+with open(output_filename, "w", encoding="utf-8") as f:
+    f.write("=" * 70 + "\n")
+    f.write("AUTOMATED CODE DEBRIEFING TIMELINE\n")
+    f.write("Generated using Gemini Multimodal AI\n")
+    f.write("=" * 70 + "\n\n")
+    f.write(f"Source Video: {VIDEO_PATH}\n")
+    f.write(f"Analysis Time: {elapsed:.1f} seconds\n\n")
+    f.write("=" * 70 + "\n\n")
+    f.write(response.text)
+
+print(f"\n\n💾 Downloading debriefing file...")
+files.download(output_filename)
+
+# Cleanup
+print("\n🧹 Cleaning up...")
+client.files.delete(name=video_file.name)
+os.remove(VIDEO_PATH)
+os.remove(output_filename)
+
+print("\n" + "=" * 70)
+print("✅ COMPLETE! Check your Downloads folder for the debriefing file.")
+print("   Use this timeline to facilitate your team debriefing session.")
+print("=" * 70)
